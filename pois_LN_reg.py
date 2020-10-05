@@ -153,14 +153,18 @@ class MuTauSampler:
     def mutau_nr(self, mu, tau, epsi):
         is_max = False  # if we converged to a maximum
         # PyCharm compiler working weird for below line: says is_nr_bad is never used
+
+        # initialized a bunch of variables
+        # below 4 variables, according to pycharm compiler, are never used. do you need to initialize before while loop?
         is_nr_bad = False  # if regular N-R iterations are insufficient, so we need to employ linesearch
+        h = torch.tensor(float('nan'))
+        h_inv = torch.tensor(float('nan'))
+        grad = torch.tensor(float('nan'))
 
         use_ls = False  # whether we used linesearch (for display purposes only)
 
         mu_prev = mu.clone()
         tau_prev = tau.clone()
-
-        grad = torch.tensor(0.)
 
         i = 1
         while True:
@@ -216,6 +220,8 @@ class MuTauSampler:
             step = -h_inv @ grad
 
             # check if we've reached a local maximum
+            print(grad.norm())
+
             if (grad.norm() <= 1e-6) and is_ndef:
                 is_max = True
                 break
@@ -223,7 +229,7 @@ class MuTauSampler:
             # 2. otherwise, employ line search
             fc_step = self.fcmutau(mu + step[0], tau + step[1], epsi)
             if is_nr_bad or fc_step.isnan().item() or fc_step.isinf().item() \
-               or (fc_step - self.fcmutau(tau, mu, epsi) < -1e-3):
+                    or (fc_step - self.fcmutau(tau, mu, epsi) < -1e-3):
 
                 # indicate that we used linesearch for these iterations
                 use_ls = True
@@ -273,7 +279,7 @@ class MuTauSampler:
 
     def gradmutau(self, mu, tau, epsi):
         gr = torch.tensor([self.sums - mu.exp() * self.d1.sum() - self.mutau * tau * (mu - self.mumu),
-                           (-self.eps_x + mu.exp() * (self.d1.view(1, -1) @ epsi)) / 2 * tau ** (3 / 2) +
+                           (-self.eps_x + mu.exp() * (self.d1.view(1, -1) @ epsi)) / (2 * tau ** (3 / 2)) +
                            (2 * self.taua - 1) / (2 * tau) - 1 / self.taub - self.mutau / 2 * (mu - self.mumu) ** 2])
         return gr
 
@@ -323,9 +329,8 @@ def tqrat(th_0, th_p, mu_f, mu_r, sig_f, sig_r, nu):
 # mutau, mutau_p, mu_f, mu_r, hf, hr, hf_inv, hr_inv, self.mutau_ihsf
 # what should these dimensions be?
 def mvnqrat(th0, thP, muF, muR, hessF, hessR, hessFinv, hessRinv, ihsf):
-
     qrat = (-torch.log(torch.det(-hessRinv / ihsf)) + (th0 - muR).view(1, -1) @ hessR * ihsf @ (th0 - muR) -
-           (-torch.log(torch.det(-hessFinv / ihsf)) + (thP - muF).transpose(0, 1) @ hessF * ihsf @ (thP - muF)))/2
+            (-torch.log(torch.det(-hessFinv / ihsf)) + (thP - muF).transpose(0, 1) @ hessF * ihsf @ (thP - muF))) / 2
 
     # (-(-hessRinv / ihsf).det().log()) + \
     # (th0 - muR).view(1, -1) @ hessR * ihsf * (th0 - muR) - \
@@ -361,11 +366,12 @@ def normgampdf(mu, tau, a, b, m, t, logmode=False):
 
 
 poisson = torch.poisson(torch.exp(-3. + 0.9 * torch.randn(5000, 1)))
-X = MuTauSampler(poisson, 1, torch.zeros_like(poisson))
+X = MuTauSampler(poisson, 1, torch.zeros_like(poisson), mumu=torch.tensor([[-3.]]), taua=torch.tensor([[10.]]),
+                 taub=torch.tensor([[0.2]]))
 
 epsi_test = torch.zeros_like(X.x)
-tau_test = torch.tensor(0.9)  # 1.234567
-mu_test = torch.tensor(-3.)  # -3.
+tau_test = torch.tensor(1.)  # 1.234567
+mu_test = torch.tensor(1.)  # -3.
 
 # mu_result, tau_result, rej_result, use_ls_result = X.mutausamp(mu_test, tau_test, epsi_test)
 # print("mu: %s\ntau: %s\nrej: %s\n use_ls: %s" % (mu_result, tau_result, rej_result, use_ls_result))
