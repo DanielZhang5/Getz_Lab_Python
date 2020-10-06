@@ -1,0 +1,22 @@
+iteration 95 done
+tensor(13218.3057)
+iteration 96 done
+tensor(13218.3057)
+iteration 97 done
+tensor(13218.3057)
+iteration 98 done
+tensor(13218.3057)
+iteration 99 done
+tensor(13218.3057)
+iteration 100 done
+tensor(13218.3057)
+mutau: tensor([[1.],
+        [1.]])
+h: tensor([[-1.3591e+04, -1.0873e+01],
+        [-1.0873e+01, -3.5338e+01]])
+h_inv: tensor([[-7.3594e-05,  2.2644e-05],
+        [ 2.2644e-05, -2.8305e-02]])
+is_max: False
+use_ls: True
+
+Process finished with exit code 0
