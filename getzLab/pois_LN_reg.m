@@ -1,9 +1,29 @@
+clear;
+
 X = [];
+X.x = poissrnd(exp(-3 + 0.9*randn(500, 1)));
 X.reidx = ones(size(X.x));
 X.ncat = max(X.reidx);
 X.sums = accumarray(X.reidx, X.x);
 X.reidx_bin = sparse(1:length(X.reidx), X.reidx, 1);
-X.y = 0
+X.y = 0;
+
+P = [];
+P.mutau_ihsf = 1;
+P.taua = ones(ones(X.ncat + 1, 1));
+P.taub = 10*ones(X.ncat, 1);
+P.mumu = zeros(X.ncat, 1);
+P.mutau = ones(X.ncat, 1);
+P.tMH_NR_iter = 100;
+
+X.P = P;
+
+# Y.j = 1;
+# Y.eps_x = epsi'*X.x;
+# Y.eBC = 1;
+# Y.exp_eps_tau = exp(epsi/sqrt(tau_e));
+# Y.d1 = exp_eps_tau;
+
 
 
 
@@ -17,8 +37,8 @@ end
 %a M-H sample from p(mu_j, tau_j|-)
 function [mu, tau, rej, use_LS] = mutausamp(mu, tau, epsi, j, X),
   %select jth mu/tau from array
-  mu = mu;
-  tau = tau;
+  mu = mu(j);
+  tau = tau(j);
   %TODO: select proper hyperparameters in the same fashion
 
   %tidx = logical(X.reidx_bin(:, j));
@@ -26,7 +46,7 @@ function [mu, tau, rej, use_LS] = mutausamp(mu, tau, epsi, j, X),
   %constant variables
   Y = [];
   Y.j = j;
-  Y.eps_x = epsi'*X.x(tidx);
+  Y.eps_x = epsi'*X.x;
   # if max(size(X.y)) > 1, y = X.y(tidx); else, y = X.y; end
   Y.eBC = 1; %exp(X.c(tidx, :)* + y); %XXX: does this only work if X.y is a scalar?
   
@@ -66,8 +86,8 @@ end
 function fc = fcmutau(mu, tau, epsi, X, Y)
   tau_e = exp(tau);
 
-  fc = mu*X.sums + Y.eps_x/sqrt(tau_e) - exp(mu)*(Y.eBC)'*exp(epsi/sqrt(tau_e))) + ...
-        normgampdf(mu, tau_e, X.P.taua, X.P.taub, X.P.mumu, X.P.mutau, true) + tau;
+  fc = mu*X.sums(Y.j) + Y.eps_x/sqrt(tau_e) - exp(mu)*((Y.eBC)'*exp(epsi/sqrt(tau_e))) + ...
+        normgampdf(mu, tau_e, X.P.taua(Y.j), X.P.taub(Y.j), X.P.mumu(Y.j), X.P.mutau(Y.j), true) + tau;
 end
 
 %log posterior ratio for mu,tau (tau log transformed)
@@ -79,24 +99,24 @@ function pr = pratmutau(mu, tau, muP, tauP, epsi, X, Y)
 end
 
 %gradient of log p(mu, tau|-)
-function gr = gradmutau(mu, tau, , epsi, X, Y)
-  gr = [X.sums - exp(mu)*sum(Y.d1) - ...
-        X.P.mutau*tau*(mu - X.P.mumu), ...
+function gr = gradmutau(mu, tau, epsi, X, Y)
+  gr = [X.sums(Y.j) - exp(mu)*sum(Y.d1) - ...
+        X.P.mutau(Y.j)*tau*(mu - X.P.mumu(Y.j)), ...
         (-Y.eps_x + exp(mu)*(Y.d1'*epsi))/(2*tau^(3/2)) + ...
-         (2*X.P.taua - 1)/(2*tau) - 1/X.P.taub - X.P.mutau/2*(mu - X.P.mumu)^2];
+         (2*X.P.taua(Y.j) - 1)/(2*tau) - 1/X.P.taub(Y.j) - X.P.mutau(Y.j)/2*(mu - X.P.mumu)^2];
 end
 
 %Hessian of log p(mu, tau|-)
-function H = hessmutau(mu, tau, , epsi, X, Y)
+function H = hessmutau(mu, tau, epsi, X, Y)
   H = NaN(2);
 
   H(1, 1) = -exp(mu)*sum(Y.d1) - ...
-            X.P.mutau*tau;
+            X.P.mutau(Y.j)*tau;
   H(2, 2) = 3/4*tau^(-5/2)*Y.eps_x - exp(mu)*((Y.d1'*epsi)*(3/4)*tau^(-5/2) + ...
                                               (Y.d1'*(epsi.^2))*(tau^-3)/4) - ...
-            (2*X.P.taua - 1)/(2*tau^2);
+            (2*X.P.taua(Y.j) - 1)/(2*tau^2);
   H(1, 2) = exp(mu)*(Y.d1'*epsi)/(2*tau^(3/2)) - ...
-            X.P.mutau*(mu - X.P.mumu);
+            X.P.mutau(Y.j)*(mu - X.P.mumu(Y.j));
   H(2, 1) = H(1, 2);
 end
 
@@ -117,8 +137,8 @@ function [mutau, H, Hinv, is_max, use_LS] = mutauNR(mu, tau, epsi, X, Y)
     Y.exp_eps_tau = exp(epsi/sqrt(tau_e));
     Y.d1 = Y.exp_eps_tau;
 
-    grad = gradmutau(mu, tau_e, , epsi, X, Y)';
-    H = hessmutau(mu, tau_e, , epsi, X, Y);
+    grad = gradmutau(mu, tau_e, epsi, X, Y)';
+    H = hessmutau(mu, tau_e, epsi, X, Y);
 
     %change-of-variable chain rule factors
     H(2, 2) = grad(2)*tau_e + tau_e^2*H(2, 2);
@@ -160,7 +180,7 @@ function [mutau, H, Hinv, is_max, use_LS] = mutauNR(mu, tau, epsi, X, Y)
     if norm(grad) <= 1e-6 && is_ndef, is_max = 1; break; end
 
     %2. otherwise, employ line search
-    fc_step = fcmutau(mu + step(1), tau + step(2), , epsi, , , X, Y);
+    fc_step = fcmutau(mu + step(1), tau + step(2), epsi, X, Y);
     if is_NR_bad || isnan(fc_step) || isinf(fc_step) || ...
        fc_step - fcmutau(mu, tau, epsi, X, Y) < -1e-3,
       %indicate that we used linesearch for these iterations
@@ -174,19 +194,19 @@ function [mutau, H, Hinv, is_max, use_LS] = mutauNR(mu, tau, epsi, X, Y)
       d_hat = step/s0;
 
       %bound line search from below at current value
-      fc = fcmutau(mu, tau, , epsi, , , X, Y)*[1 1];
+      fc = fcmutau(mu, tau, epsi, X, Y)*[1 1];
 
       %2.3. do line search
       for l = 0:50,
-	s = s0*0.5^l;
+        s = s0*0.5^l;
 
-	f = fcmutau(mu + s*d_hat(1), tau + s*d_hat(2), epsi, X, Y);
-	if fc(mod(l - 1, 2) + 1) > fc(mod(l - 2, 2) + 1) && fc(mod(l - 1, 2) + 1) > f,
-	  s = s0*0.5^(l - 1);
-	  break;
-	else
-	  fc(mod(l, 2) + 1) = f;
-	end
+        f = fcmutau(mu + s*d_hat(1), tau + s*d_hat(2), epsi, X, Y);
+        if fc(mod(l - 1, 2) + 1) > fc(mod(l - 2, 2) + 1) && fc(mod(l - 1, 2) + 1) > f,
+          s = s0*0.5^(l - 1);
+          break;
+        else
+          fc(mod(l, 2) + 1) = f;
+        end
       end
 
       step = d_hat*s;
@@ -199,8 +219,8 @@ function [mutau, H, Hinv, is_max, use_LS] = mutauNR(mu, tau, epsi, X, Y)
     i = i + 1;
     if i > X.P.tMH_NR_iter,
       if ~is_ndef,
-	H = eye(2); Hinv = -eye(2);
-	disp('WARNING: Newton-Raphson terminated at non-concave point!');
+        H = eye(2); Hinv = -eye(2);
+        disp('WARNING: Newton-Raphson terminated at non-concave point!');
       end
 
       break;
@@ -281,7 +301,22 @@ function [epsi, H, Hinv] = epsiNR(epsi, mu, tau, X),
   end
 end
 
-[mu, tau, rej, use_LS] = mutausamp(epsi, tau, mu, X);
 
-fprintf(["sampled mu: %s"], mu)
-fprintf(["sampled tau: %s"], tau)
+%epsi = zeros(size(X.x));
+%mu = 1;
+%tau = 1;
+%j = 1;
+
+%[mu, tau, rej, use_LS] = mutausamp(mu, tau, epsi, j, X);
+
+%fprintf(["sampled mu: %s"], mu(1:50))
+%fprintf(["sampled tau: %s"], tau(1:50))
+
+Y.j = 1;
+Y.eps_x = epsi'*X.x;
+Y.eBC = 1;
+Y.exp_eps_tau = exp(epsi/sqrt(e));
+Y.d1 = Y.exp_eps_tau;
+poop = fcmutau(1, 1, zeros(size(X.x)), X, Y);
+# fprintf(["fcmutau: %s"], poop);
+disp(size(poop));
