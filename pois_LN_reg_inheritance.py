@@ -1,5 +1,6 @@
-import numpy as np
 import math
+import numpy as np
+import matplotlib.pyplot as plt
 import torch
 from torch.distributions import StudentT
 
@@ -136,7 +137,7 @@ class MuTauSampler(SamplerWithPAndY):
         # if not, then reverse jump will have its own parameterization.
         if not is_max:
             # TODO: way to limit the outputs in python?
-            mu_r, hr, hr_inv, nothing1, nothing2 = self.__mutau_nr(mu_f[0], mu_f[1], epsi)
+            mu_r, hr, hr_inv = self.__mutau_nr(mu_f[0], mu_f[1], epsi)[0:2]
         else:
             mu_r = mu_f
             hr, hr_inv = hf, hf_inv
@@ -266,7 +267,6 @@ class MuTauSampler(SamplerWithPAndY):
                     print('WARNING: Newton-Raphson terminated at non-concave point!')
                 break
 
-        print("iterations: %s" % i)
         mutau = torch.tensor([[mu], [tau]])
 
         return mutau, h, h_inv, is_max, use_ls
@@ -394,5 +394,26 @@ tau_test = torch.tensor([1.])  # 1.234567
 mu_test = torch.tensor([1.])  # -3.
 j_test = 0
 
-mu_result, tau_result, rej_result, use_ls_result = X.mutausamp(mu_test, tau_test, epsi_test)
-print("mu: %s\ntau: %s\nrej: %s\nuse_ls: %s" % (mu_result, tau_result, rej_result, use_ls_result))
+mu_array = np.array([])
+tau_array = np.array([])
+
+# plt.plot([1, 2, 3], [1, 2, 3], "bo", markersize=2)
+# plt.show()
+
+for i in range(1, 2000):
+    mu_result, tau_result, _, _ = X.mutausamp(mu_test, tau_test, epsi_test)
+    mu_array = np.append(mu_array, mu_result)
+    tau_array = np.append(tau_array, 1/tau_result.sqrt())
+
+    # print(mu_array)
+    print("points: %s" % i)
+
+print(mu_array[0])
+print(tau_array[0])
+plt.xlim(-5, 0)
+plt.ylim(0, 5)
+plt.plot(mu_array, tau_array, 'ko', markersize=2)
+plt.plot(-3, 0.9, 'ro', markersize=2)
+plt.xlabel("mu")
+plt.ylabel("tau")
+plt.show()
